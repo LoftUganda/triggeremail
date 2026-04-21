@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trigger-email",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+
+  // Cloudflare Email Routing binding - sends emails via Email Workers
+  "send_email": [
+    {
+      "name": "SEND_EMAIL"
+    }
+  ],
+
+  // D1 database for mail queue, delivery tracking, and templates
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "trigger-email-db",
+      "database_id": "3e7fd25b-0454-4083-8f8e-aaee2635b190"
+    }
+  ],
+
+  // Default email configuration (override per-document via from/replyTo fields)
+  "vars": {
+    "DEFAULT_FROM": "noreply@notifications.akabbo.co",
+    "DEFAULT_REPLY_TO": "support@akabbo.co"
+  }
+}
