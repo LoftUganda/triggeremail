@@ -15,6 +15,7 @@ const SCHEMA_SQL = [
     message_id TEXT,
     template_name TEXT,
     template_data TEXT,
+    attachments TEXT,
     delivery_state TEXT NOT NULL DEFAULT 'PENDING',
     delivery_error TEXT,
     delivery_attempts INTEGER NOT NULL DEFAULT 0,
@@ -58,6 +59,7 @@ interface MailRow {
   message_id: string | null;
   template_name: string | null;
   template_data: string | null;
+  attachments: string | null;
   delivery_state: string;
   delivery_error: string | null;
   delivery_attempts: number;
@@ -83,6 +85,7 @@ function rowToDoc(row: MailRow): MailDocument {
     messageId: row.message_id,
     templateName: row.template_name,
     templateData: row.template_data ? JSON.parse(row.template_data) : null,
+    attachments: row.attachments ? JSON.parse(row.attachments) : null,
     delivery: {
       state: row.delivery_state as DeliveryState,
       startTime: row.delivery_start_time,
@@ -112,13 +115,14 @@ export async function insertMail(
     messageId: string | null;
     templateName: string | null;
     templateData: Record<string, unknown> | null;
+    attachments: import("./types").Attachment[] | null;
   }
 ): Promise<void> {
   await db
     .prepare(
       `INSERT INTO mail (id, to_recipients, cc, bcc, from_addr, reply_to, headers,
-         subject, text_body, html_body, message_id, template_name, template_data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         subject, text_body, html_body, message_id, template_name, template_data, attachments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       doc.id,
@@ -133,7 +137,8 @@ export async function insertMail(
       doc.htmlBody,
       doc.messageId,
       doc.templateName,
-      doc.templateData ? JSON.stringify(doc.templateData) : null
+      doc.templateData ? JSON.stringify(doc.templateData) : null,
+      doc.attachments ? JSON.stringify(doc.attachments) : null
     )
     .run();
 }

@@ -1,6 +1,6 @@
 import { EmailMessage } from "cloudflare:email";
 import { createMimeMessage } from "mimetext";
-import type { Env } from "./types";
+import type { Env, Attachment } from "./types";
 
 export interface SendOptions {
   from: string;
@@ -13,6 +13,7 @@ export interface SendOptions {
   htmlBody: string | null;
   messageId: string | null;
   headers: Record<string, string> | null;
+  attachments: Attachment[] | null;
 }
 
 export interface SendResult {
@@ -32,10 +33,8 @@ export async function sendEmail(env: Env, opts: SendOptions): Promise<SendResult
 
   const msg = createMimeMessage();
 
-  // Set sender
   msg.setSender({ addr: opts.from });
 
-  // Set recipients using mimetext's setTo/setCc/setBcc methods
   if (opts.to.length > 0) {
     msg.setTo(opts.to);
   }
@@ -46,29 +45,23 @@ export async function sendEmail(env: Env, opts: SendOptions): Promise<SendResult
     msg.setBcc(opts.bcc);
   }
 
-  // Set subject
   msg.setSubject(opts.subject);
 
-  // Add reply-to header
   if (opts.replyTo) {
     msg.setHeader("Reply-To", opts.replyTo);
   }
 
-  // Add message-id header
   if (opts.messageId) {
     msg.setHeader("Message-ID", opts.messageId);
   }
 
-  // Add custom headers
   if (opts.headers) {
     for (const [key, value] of Object.entries(opts.headers)) {
       msg.setHeader(key, value);
     }
   }
 
-  // Add body content
   if (opts.htmlBody && opts.textBody) {
-    // Multipart: both HTML and plain text
     msg.addMessage({ contentType: "text/html", data: opts.htmlBody });
     msg.addMessage({ contentType: "text/plain", data: opts.textBody });
   } else if (opts.htmlBody) {
@@ -79,7 +72,26 @@ export async function sendEmail(env: Env, opts: SendOptions): Promise<SendResult
     throw new Error("No email body provided (need text or html)");
   }
 
-  // Build and send the email message
+  if (opts.attachments && opts.attachments.length > 0) {
+    for (const att of opts.attachments) {
+      if (att.content) {
+        msg.addAttachment({
+          filename: att.filename ?? "attachment",
+          contentType: att.contentType ?? "application/octet-stream",
+          data: typeof att.content === "string" ? att.content : new TextDecoder().decode(att.content),
+        });
+      } else if (att.href) {
+        const res = await fetch(att.href);
+        const data = await res.arrayBuffer();
+        msg.addAttachment({
+          filename: att.filename ?? att.href.split("/").pop() ?? "attachment",
+          contentType: att.contentType ?? "application/octet-stream",
+          data: new TextDecoder().decode(data),
+        });
+      }
+    }
+  }
+
   const allRecipients = [...opts.to, ...opts.cc, ...opts.bcc];
   const emailMessage = new EmailMessage(opts.from, allRecipients.join(","), msg.asRaw());
 

@@ -1,8 +1,9 @@
 import { initSchema, insertMail, updateDeliveryState, getMail, listMail, upsertTemplate, getTemplate, listTemplates } from "./db";
 import { sendEmail } from "./mail";
 import { renderTemplate } from "./templates";
+import { sendWebhook } from "./webhook";
 import { ValidationError, NotFoundError, TemplateError } from "./errors";
-import type { Env, MailRequest, TemplateRequest } from "./types";
+import type { Env, MailRequest, TemplateRequest, DeliveryEventType } from "./types";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -90,8 +91,8 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
   if (!body.to && !body.cc && !body.bcc) {
     throw new ValidationError("At least one of 'to', 'cc', or 'bcc' is required");
   }
-  if (!body.message?.subject) {
-    throw new ValidationError("message.subject is required");
+  if (!body.template && !body.message?.subject) {
+    throw new ValidationError("message.subject is required (unless using template)");
   }
   if (!body.message?.text && !body.message?.html && !body.template) {
     throw new ValidationError("At least one of message.text, message.html, or template is required");
@@ -104,9 +105,9 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
   const from = body.from || env.DEFAULT_FROM;
   const replyTo = body.replyTo || null;
 
-  let subject = body.message.subject;
-  let textBody = body.message.text || null;
-  let htmlBody = body.message.html || null;
+  let subject = body.message?.subject ?? null;
+  let textBody = body.message?.text ?? null;
+  let htmlBody = body.message?.html ?? null;
 
   // If a template is specified, render it and merge with message fields
   if (body.template) {
@@ -114,6 +115,10 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
     subject = rendered.subject ?? subject;
     textBody = rendered.text ?? textBody;
     htmlBody = rendered.html ?? htmlBody;
+  }
+
+  if (!subject) {
+    throw new ValidationError("message.subject is required (either directly or from template)");
   }
 
   // Persist the mail document
@@ -128,13 +133,17 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
     subject,
     textBody,
     htmlBody,
-    messageId: body.message.messageId || null,
+    messageId: body.message?.messageId || null,
     templateName: body.template?.name || null,
     templateData: body.template?.data || null,
+    attachments: body.message?.attachments || null,
   });
+
+  void sendWebhook(env, "onPending", { id, to, cc, bcc, from, subject });
 
   // Attempt to send immediately
   await updateDeliveryState(env.DB, id, "PROCESSING");
+  void sendWebhook(env, "onStart", { id, to, cc, bcc, from, subject });
 
   const result = await sendEmail(env, {
     from,
@@ -145,8 +154,9 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
     subject,
     textBody,
     htmlBody,
-    messageId: body.message.messageId || null,
+    messageId: body.message?.messageId || null,
     headers: body.headers || null,
+    attachments: body.message?.attachments || null,
   });
 
   if (!result.success) {
@@ -155,6 +165,7 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
       info: JSON.stringify({ accepted: result.accepted, rejected: result.rejected }),
     });
     const doc = await getMail(env.DB, id);
+    void sendWebhook(env, "onError", doc);
     return Response.json(doc, { status: 202 });
   }
 
@@ -163,6 +174,7 @@ async function handleCreateMail(request: Request, env: Env): Promise<Response> {
   });
 
   const doc = await getMail(env.DB, id);
+  void sendWebhook(env, "onSuccess", doc);
   return Response.json(doc, { status: 201 });
 }
 
@@ -207,6 +219,7 @@ async function handleRetryMail(id: string, env: Env): Promise<Response> {
     htmlBody: doc.htmlBody,
     messageId: doc.messageId,
     headers: doc.headers,
+    attachments: doc.attachments,
   });
 
   if (!result.success) {
@@ -214,10 +227,14 @@ async function handleRetryMail(id: string, env: Env): Promise<Response> {
       error: result.error ?? "Unknown send error",
       info: JSON.stringify({ accepted: result.accepted, rejected: result.rejected }),
     });
+    const updated = await getMail(env.DB, id);
+    void sendWebhook(env, "onError", updated);
   } else {
     await updateDeliveryState(env.DB, id, "SUCCESS", {
       info: JSON.stringify({ accepted: result.accepted, rejected: result.rejected }),
     });
+    const updated = await getMail(env.DB, id);
+    void sendWebhook(env, "onSuccess", updated);
   }
 
   const updated = await getMail(env.DB, id);

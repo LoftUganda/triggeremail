@@ -29,7 +29,7 @@ export interface DeliveryInfo {
   rejected: string[];
 }
 
-/** The request body posted to POST /mail. */
+/** Request body for POST /mail. */
 export interface MailRequest {
   to?: string | string[];
   cc?: string | string[];
@@ -42,6 +42,7 @@ export interface MailRequest {
     text?: string;
     html?: string;
     messageId?: string;
+    attachments?: Attachment[];
   };
   template?: {
     name: string;
@@ -64,6 +65,7 @@ export interface MailDocument {
   messageId: string | null;
   templateName: string | null;
   templateData: Record<string, unknown> | null;
+  attachments: Attachment[] | null;
   delivery: DeliveryStatus;
   createdAt: string;
   updatedAt: string;
@@ -97,4 +99,29 @@ export interface Env {
   DB: D1Database;
   DEFAULT_FROM: string;
   DEFAULT_REPLY_TO: string;
+  WEBHOOK_URL?: string;
+  WEBHOOK_SECRET?: string;
 }
+
+/** Email attachment, mirrors Firebase's nodemailer attachment spec. */
+export interface Attachment {
+  filename?: string;
+  content?: string | ArrayBuffer | Uint8Array;
+  path?: string;
+  href?: string;
+  contentType?: string;
+  contentDisposition?: string;
+  cid?: string;
+  encoding?: string;
+  headers?: Record<string, string>;
+}
+
+/** Firebase-style delivery event names. */
+export type DeliveryEventType =
+  | "onStart"
+  | "onPending"
+  | "onProcessing"
+  | "onRetry"
+  | "onError"
+  | "onSuccess"
+  | "onComplete";

@@ -1,0 +1,24 @@
+https://firebase.google.com/docs/extensions/official/firestore-send-email
+
+
+
+
+
+
+WEbhook environment variable for where to notify state changes 
+
+
+
+
+
+Later on:
+Prreventing duplicate send(lease) and queuing 
+
+
+
+
+Autorecognize template candidates from email sends periodically and suggest them to the user
+
+
+
+

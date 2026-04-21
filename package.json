@@ -5,19 +5,26 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@handlebars/parser": "^2.2.2",
     "handlebars": "^4.7.9",
-    "mimetext": "^3.0.28"
+    "mimetext": "^3.0.28",
+    "mustache": "^4.2.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260417.1",
+    "@vitest/coverage-v8": "^4.1.5",
+    "happy-dom": "^20.9.0",
     "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
     "wrangler": "^4.83.0"
   }
 }
